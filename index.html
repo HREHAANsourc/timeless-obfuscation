@@ -1,4 +1,664 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timeless Obfuscation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', sans-serif;
+    color: var(--ink);
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+    transition: background .5s ease, color .5s ease;
+  }
+  /* Dark theme (default) */
+  body {
+    --ink: #f6f3f6;
+    --muted: rgba(246, 243, 246, 0.60);
+    --bg: #0a0a0d;
+    --panel: rgba(255, 255, 255, 0.07);
+    --field: rgba(0, 0, 0, 0.35);
+    --line: rgba(255, 255, 255, 0.10);
+    --border: rgba(255, 77, 141, 0.28);
+    --glyph: 0.14;
+    --shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+    background:
+      radial-gradient(1000px 480px at 85% -8%, rgba(255, 77, 141, 0.16), transparent 60%),
+      radial-gradient(900px 500px at -8% 25%, rgba(255, 138, 61, 0.12), transparent 60%),
+      radial-gradient(700px 500px at 50% 110%, rgba(255, 77, 141, 0.10), transparent 65%),
+      var(--bg);
+  }
+  /* Light theme */
+  body:has(#theme-light:checked) {
+    --ink: #17141a;
+    --muted: #6d6472;
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --field: #faf7f9;
+    --line: rgba(23, 20, 26, 0.09);
+    --border: rgba(255, 77, 141, 0.25);
+    --glyph: 0.07;
+    --shadow: 0 20px 60px rgba(214, 125, 74, 0.14), 0 2px 8px rgba(23, 20, 26, 0.04);
+    background:
+      radial-gradient(1000px 480px at 85% -8%, rgba(255, 77, 141, 0.10), transparent 60%),
+      radial-gradient(900px 500px at -8% 25%, rgba(255, 154, 61, 0.09), transparent 60%),
+      var(--bg);
+  }
+
+  /* ---------- background: gradient blobs + flying glyphs ---------- */
+  .bg-orbs { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .orb {
+    position: absolute; border-radius: 50%; filter: blur(90px);
+    animation: drift 22s ease-in-out infinite alternate;
+  }
+  .orb-1 { width: 460px; height: 460px; background: radial-gradient(circle, rgba(255, 77, 141, 0.30), transparent 70%); top: -140px; left: -120px; }
+  .orb-2 { width: 540px; height: 540px; background: radial-gradient(circle, rgba(255, 154, 61, 0.26), transparent 70%); bottom: -180px; right: -140px; animation-delay: -7s; animation-duration: 27s; }
+  .orb-3 { width: 360px; height: 360px; background: radial-gradient(circle, rgba(255, 77, 141, 0.16), transparent 70%); top: 42%; left: 58%; animation-delay: -14s; animation-duration: 24s; }
+  @keyframes drift {
+    0%   { transform: translate(0, 0) scale(1); }
+    50%  { transform: translate(90px, -60px) scale(1.15); }
+    100% { transform: translate(-70px, 80px) scale(0.94); }
+  }
+  .grid-overlay {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 90% 65% at 50% 0%, black 25%, transparent 78%);
+    -webkit-mask-image: radial-gradient(ellipse 90% 65% at 50% 0%, black 25%, transparent 78%);
+    opacity: .5;
+  }
+  .glyph-field { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .glyph {
+    position: absolute;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    color: var(--ink);
+    opacity: var(--glyph);
+    white-space: nowrap;
+    user-select: none;
+  }
+  .glyph.tinted { color: #ff4d8d; opacity: calc(var(--glyph) * 1.6); }
+  @keyframes flyX {
+    from { transform: translateX(-14vw) rotate(-8deg); }
+    to   { transform: translateX(114vw) rotate(8deg); }
+  }
+  @keyframes bob {
+    0%   { translate: 0 0; }
+    50%  { translate: 0 -44px; }
+    100% { translate: 0 18px; }
+  }
+  @keyframes flyY {
+    from { transform: translateY(-12vh) rotate(90deg); }
+    to   { transform: translateY(112vh) rotate(74deg); }
+  }
+  @keyframes sway {
+    0%   { translate: 0 0; }
+    50%  { translate: 42px 0; }
+    100% { translate: -30px 0; }
+  }
+  .theme-radio { position: absolute; opacity: 0; pointer-events: none; }
+
+  .wrap { position: relative; z-index: 1; max-width: 980px; margin: 0 auto; padding: 0 22px; }
+
+  /* ---------- theme toggle: one sun/moon button ---------- */
+  .theme-toggle {
+    position: absolute; top: 26px; right: 26px; z-index: 5;
+    display: flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; border-radius: 999px; cursor: pointer;
+    color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    transition: transform .2s ease, box-shadow .25s ease, color .3s ease, border-color .3s ease;
+  }
+  .theme-toggle:hover {
+    transform: scale(1.08); border-color: rgba(255, 77, 141, 0.5);
+    box-shadow: var(--shadow), 0 0 26px rgba(255, 154, 61, 0.25);
+  }
+  .icon-sun { display: none; }
+  body:has(#theme-light:checked) .icon-sun { display: block; color: #ff8a3d; }
+  body:has(#theme-light:checked) .icon-moon { display: none; }
+
+  /* ---------- header ---------- */
+  header { padding: 82px 0 44px; text-align: center; position: relative; }
+  .eyebrow {
+    display: inline-block; font-size: 12px; letter-spacing: 4px; text-transform: uppercase;
+    font-weight: 700; color: #ff8a3d; background: rgba(255, 138, 61, 0.08);
+    border: 1px solid rgba(255, 138, 61, 0.25);
+    padding: 9px 20px; border-radius: 999px; margin-bottom: 24px;
+    animation: pulseGlow 3.2s ease-in-out infinite;
+  }
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 0 rgba(255, 77, 141, 0); }
+    50%      { box-shadow: 0 0 26px rgba(255, 77, 141, 0.35); }
+  }
+  h1 {
+    font-family: 'Sora', sans-serif; font-weight: 800;
+    font-size: clamp(34px, 7vw, 72px); line-height: 1.06; letter-spacing: -1.5px;
+    background: linear-gradient(110deg, var(--ink) 10%, #ff4d8d 40%, #ff9a3d 62%, var(--ink) 92%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: sheen 6s ease-in-out infinite;
+  }
+  @keyframes sheen { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+  .tagline { margin-top: 18px; color: var(--muted); font-size: 17px; }
+  .tagline b { color: var(--ink); font-weight: 700; }
+
+  /* ---------- panels ---------- */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 28px;
+    padding: 28px;
+    box-shadow: var(--shadow);
+    transition: box-shadow .3s ease, border-color .3s ease, background .5s ease;
+  }
+  .panel:hover {
+    border-color: rgba(255, 77, 141, 0.5);
+    box-shadow: var(--shadow), 0 0 50px rgba(255, 77, 141, 0.12);
+  }
+  .panel-top { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 16px; }
+  .panel-label {
+    font-size: 12px; letter-spacing: 3px; text-transform: uppercase;
+    font-weight: 700;
+    background: linear-gradient(90deg, #ff4d8d, #ff9a3d);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  textarea {
+    width: 100%; min-height: 200px; resize: vertical;
+    font-family: 'JetBrains Mono', monospace; font-size: 14px; line-height: 1.6;
+    color: var(--ink); background: var(--field);
+    border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px;
+    outline: none; transition: border-color .25s ease, box-shadow .25s ease, background .5s ease;
+  }
+  textarea::placeholder { color: var(--muted); opacity: .7; }
+  textarea:focus { border-color: #ff4d8d; box-shadow: 0 0 0 4px rgba(255, 77, 141, 0.12); }
+  .dropzone {
+    margin-top: 14px; display: flex; align-items: center; justify-content: center; gap: 10px;
+    border: 1.5px dashed rgba(255, 77, 141, 0.45); border-radius: 16px; padding: 14px;
+    color: var(--muted); font-size: 14px; cursor: pointer;
+    transition: all .25s ease; text-align: center; background: var(--field);
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: #ff4d8d; background: rgba(255, 77, 141, 0.08); color: var(--ink);
+  }
+  .dropzone svg { flex-shrink: 0; }
+  .actions { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+  .btn {
+    font-family: inherit; cursor: pointer; font-weight: 700; font-size: 15px;
+    border: none; border-radius: 999px; padding: 15px 34px;
+    transition: transform .2s ease, box-shadow .25s ease, background .3s ease, border-color .3s ease;
+  }
+  .btn-primary {
+    flex: 1; min-width: 200px; color: #fff;
+    background: linear-gradient(120deg, #ff9a3d, #ff4d8d, #ff9a3d);
+    background-size: 200% 100%; animation: gradShift 5s ease-in-out infinite;
+    box-shadow: 0 10px 32px rgba(255, 138, 61, 0.35);
+    position: relative; overflow: hidden;
+  }
+  @keyframes gradShift { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+  .btn-primary::after {
+    content: ''; position: absolute; top: 0; left: -80%; width: 60%; height: 100%;
+    background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    transform: skewX(-20deg); animation: shine 3s ease-in-out infinite;
+  }
+  @keyframes shine { 0%, 60% { left: -80%; } 100% { left: 130%; } }
+  .btn-primary:hover { transform: translateY(-2px) scale(1.015); box-shadow: 0 14px 44px rgba(255, 138, 61, 0.5); }
+  .btn-primary:active { transform: translateY(0) scale(.99); }
+  .btn-ghost {
+    color: var(--ink); background: var(--field);
+    border: 1px solid var(--line);
+  }
+  .btn-ghost:hover { border-color: #ff4d8d; background: rgba(255, 77, 141, 0.08); }
+  .status { margin-top: 12px; font-size: 13px; min-height: 18px; color: #ff8a3d; opacity: 0; transition: opacity .3s ease; }
+  .status.show { opacity: 1; }
+  noscript .status, .status.static { opacity: 1; }
+
+  /* ---------- Discord banner ---------- */
+  .discord-section { padding: 46px 0 70px; }
+  .discord-banner {
+    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 20px;
+    background: linear-gradient(100deg, #5865F2, #4752e0 55%, #5865F2);
+    background-size: 200% 100%; animation: gradShift 7s ease-in-out infinite;
+    border-radius: 22px; padding: 18px 26px; min-height: 84px;
+    box-shadow: 0 16px 44px rgba(88, 101, 242, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    text-decoration: none; color: #fff;
+    transition: transform .22s ease, box-shadow .25s ease;
+  }
+  .discord-banner:hover { transform: translateY(-3px); box-shadow: 0 22px 58px rgba(88, 101, 242, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.18); }
+  .discord-left { display: flex; align-items: center; gap: 16px; min-width: 0; }
+  .discord-logo { width: 42px; height: 42px; flex-shrink: 0; filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.25)); }
+  .discord-title { font-family: 'Sora', sans-serif; font-weight: 700; font-size: clamp(16px, 3vw, 22px); letter-spacing: -.3px; }
+  .discord-sub { font-size: 14px; color: rgba(255, 255, 255, 0.85); margin-top: 4px; }
+  .join-btn {
+    flex-shrink: 0; font-weight: 700; font-size: 15px; color: #4752e0;
+    background: #fff; border-radius: 999px; padding: 12px 28px;
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .discord-banner:hover .join-btn { transform: scale(1.06); box-shadow: 0 6px 22px rgba(0, 0, 0, 0.25); }
+
+  footer { text-align: center; padding: 26px 0 40px; color: var(--muted); font-size: 13px; }
+
+  @media (max-width: 640px) {
+    .panel { padding: 20px; border-radius: 22px; }
+    .theme-toggle { top: 18px; right: 18px; }
+    .discord-banner { flex-direction: column; text-align: center; padding: 22px; }
+    .discord-left { flex-direction: column; }
+  }
+
+  /* ---------- tabs & saved scripts ---------- */
+  .tabs { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; justify-content: center; }
+  .tab-btn {
+    font-family: inherit; cursor: pointer; font-weight: 700; font-size: 14px;
+    color: var(--muted); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 999px; padding: 10px 22px;
+    transition: color .2s ease, border-color .2s ease, box-shadow .25s ease;
+  }
+  .tab-btn:hover { color: var(--ink); border-color: rgba(255, 77, 141, 0.4); }
+  .tab-btn.active {
+    color: #fff; background: linear-gradient(120deg, #ff9a3d, #ff4d8d, #ff9a3d);
+    background-size: 200% 100%; border-color: transparent;
+    box-shadow: 0 8px 24px rgba(255, 138, 61, 0.30);
+  }
+  .script-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 22px;
+    padding: 20px 22px; margin-bottom: 14px; box-shadow: var(--shadow);
+  }
+  .script-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .script-name { font-weight: 700; font-size: 16px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%; }
+  .script-meta { font-size: 12px; color: var(--muted); }
+  .script-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .script-btn {
+    font-family: inherit; cursor: pointer; font-weight: 700; font-size: 13px;
+    border: none; border-radius: 999px; padding: 10px 18px; color: #fff;
+    background: linear-gradient(120deg, #ff9a3d, #ff4d8d, #ff9a3d);
+    background-size: 200% 100%;
+    transition: transform .18s ease, box-shadow .2s ease;
+  }
+  .script-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(255, 138, 61, 0.35); }
+  .script-btn.ghosty { color: var(--ink); background: var(--field); border: 1px solid var(--line); }
+  .script-btn.danger { background: linear-gradient(120deg, #e5484d, #b3261e); }
+  .script-btn.danger:hover { box-shadow: 0 8px 22px rgba(229, 72, 77, 0.4); }
+  .empty-note { color: var(--muted); font-size: 14px; text-align: center; padding: 30px 0; }
+
+  /* pause every animation while you are working, so the page stays fast */
+  body.busy * { animation-play-state: paused !important; }
+  .btn:active, .tab-btn:active, .script-btn:active { transform: scale(.93); }
+  @keyframes pressPop {
+    0%   { transform: scale(1); }
+    45%  { transform: scale(.9); }
+    100% { transform: scale(1); }
+  }
+  .pressed { animation: pressPop .32s ease !important; }
+
+</style>
+</head>
+<body>
+<input type="checkbox" id="theme-light" class="theme-radio">
+
+  <div class="bg-orbs">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+  <div class="grid-overlay"></div>
+  <div class="glyph-field">
+    <div class="glyph tinted" style="top:53.4vh;font-size:19.3px;animation:flyX 25.7s linear -29.3s infinite reverse, bob 8.4s ease-in-out -0.7s infinite alternate;">{ }</div>
+    <div class="glyph" style="top:9.6vh;font-size:13.8px;animation:flyX 17.7s linear -1.7s infinite, bob 11.6s ease-in-out -4.3s infinite alternate;">( )</div>
+    <div class="glyph" style="top:62.0vh;font-size:31.0px;animation:flyX 28.7s linear -5.6s infinite, bob 14.4s ease-in-out -2.2s infinite alternate;">[ ]</div>
+    <div class="glyph" style="top:83.7vh;font-size:17.8px;animation:flyX 33.3s linear -43.9s infinite reverse, bob 10.6s ease-in-out -0.5s infinite alternate;">/</div>
+    <div class="glyph tinted" style="top:20.0vh;font-size:23.6px;animation:flyX 20.3s linear -13.9s infinite, bob 8.1s ease-in-out -8.2s infinite alternate;">//</div>
+    <div class="glyph" style="top:8.6vh;font-size:16.1px;animation:flyX 35.2s linear -24.6s infinite, bob 10.4s ease-in-out -0.6s infinite alternate;">\</div>
+    <div class="glyph" style="top:45.6vh;font-size:18.0px;animation:flyX 36.4s linear -14.1s infinite reverse, bob 10.8s ease-in-out -5.9s infinite alternate;">\\</div>
+    <div class="glyph" style="top:52.4vh;font-size:29.5px;animation:flyX 39.8s linear -11.0s infinite, bob 13.3s ease-in-out -5.7s infinite alternate;">;</div>
+    <div class="glyph tinted" style="top:42.3vh;font-size:27.1px;animation:flyX 37.9s linear -44.1s infinite, bob 9.6s ease-in-out -1.2s infinite alternate;">< ></div>
+    <div class="glyph" style="top:74.9vh;font-size:23.5px;animation:flyX 20.6s linear -1.8s infinite reverse, bob 11.4s ease-in-out -6.7s infinite alternate;">==</div>
+    <div class="glyph" style="top:57.5vh;font-size:21.1px;animation:flyX 42.3s linear -31.3s infinite, bob 9.8s ease-in-out -5.9s infinite alternate;">end</div>
+    <div class="glyph tinted" style="top:39.3vh;font-size:25.4px;animation:flyX 35.4s linear -37.0s infinite reverse, bob 15.9s ease-in-out -2.8s infinite alternate;">#</div>
+    <div class="glyph tinted" style="top:19.6vh;font-size:16.6px;animation:flyX 26.8s linear -43.1s infinite, bob 15.0s ease-in-out -1.5s infinite alternate;">~=</div>
+    <div class="glyph tinted" style="top:8.9vh;font-size:13.3px;animation:flyX 27.8s linear -4.7s infinite, bob 10.6s ease-in-out -6.3s infinite alternate;">nil</div>
+    <div class="glyph tinted" style="top:35.2vh;font-size:17.3px;animation:flyX 30.0s linear -3.9s infinite reverse, bob 11.4s ease-in-out -1.0s infinite alternate;">{ }</div>
+    <div class="glyph tinted" style="top:83.1vh;font-size:28.1px;animation:flyX 25.9s linear -36.5s infinite, bob 9.0s ease-in-out -9.8s infinite alternate;">//</div>
+    <div class="glyph tinted" style="top:82.0vh;font-size:21.6px;animation:flyX 21.9s linear -28.1s infinite, bob 8.8s ease-in-out -9.0s infinite alternate;">< ></div>
+    <div class="glyph tinted" style="top:16.7vh;font-size:28.5px;animation:flyX 19.8s linear -40.7s infinite reverse, bob 8.4s ease-in-out -8.1s infinite alternate;">#</div>
+    <div class="glyph vertical tinted" style="left:36.0vw;font-size:18.3px;animation:flyY 19.7s linear -3.9s infinite, sway 8.9s ease-in-out -7.3s infinite alternate;">0</div>
+    <div class="glyph vertical" style="left:50.2vw;font-size:19.5px;animation:flyY 26.8s linear -12.6s infinite, sway 12.3s ease-in-out -7.3s infinite alternate;">1</div>
+    <div class="glyph vertical" style="left:2.4vw;font-size:23.8px;animation:flyY 25.5s linear -13.2s infinite, sway 6.1s ease-in-out -1.5s infinite alternate;">2</div>
+    <div class="glyph vertical" style="left:33.3vw;font-size:19.3px;animation:flyY 17.8s linear -21.8s infinite, sway 9.3s ease-in-out -4.5s infinite alternate;">7</div>
+    <div class="glyph vertical" style="left:25.9vw;font-size:15.4px;animation:flyY 26.2s linear -3.2s infinite, sway 11.5s ease-in-out -4.5s infinite alternate;">9</div>
+    <div class="glyph vertical tinted" style="left:89.6vw;font-size:18.1px;animation:flyY 31.0s linear -16.9s infinite, sway 9.6s ease-in-out -6.1s infinite alternate;">42</div>
+    <div class="glyph vertical tinted" style="left:86.8vw;font-size:26.5px;animation:flyY 17.4s linear -19.8s infinite, sway 11.0s ease-in-out -1.1s infinite alternate;">]</div>
+    <div class="glyph vertical tinted" style="left:28.0vw;font-size:13.1px;animation:flyY 16.3s linear -1.2s infinite, sway 7.9s ease-in-out -6.2s infinite alternate;">3</div>
+    <div class="glyph vertical tinted" style="left:12.5vw;font-size:13.6px;animation:flyY 19.9s linear -15.8s infinite, sway 6.9s ease-in-out -1.9s infinite alternate;">0</div>
+  </div>
+
+  <div class="wrap">
+    <label class="theme-toggle" for="theme-light" title="Switch theme" aria-label="Switch theme">
+      <svg class="icon-moon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg class="icon-sun" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="4.2" y1="4.2" x2="6.3" y2="6.3"/><line x1="17.7" y1="17.7" x2="19.8" y2="19.8"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><line x1="4.2" y1="19.8" x2="6.3" y2="17.7"/><line x1="17.7" y1="6.3" x2="19.8" y2="4.2"/></svg>
+    </label>
+
+    <header>
+      <div class="eyebrow">Free Script Protection</div>
+      <h1>Timeless Obfuscation</h1>
+      <p class="tagline">Paste your Lua or Luau script, and make it unreadable in one click.</p>
+    </header>
+
+    <div class="tabs">
+      <button class="tab-btn active" id="tabBtnObfuscator">Obfuscator</button>
+      <button class="tab-btn" id="tabBtnScripts">My Scripts (<span id="scriptCount">0</span>)</button>
+    </div>
+
+    <div id="tab-obfuscator">
+    <section class="panel">
+      <div class="panel-top">
+        <div class="panel-label">Input</div>
+      </div>
+
+      <textarea id="input" placeholder="Paste your Lua or Luau script here..." spellcheck="false"></textarea>
+
+      <label class="dropzone" for="fileInput" id="dropzone">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>Or drop a .lua file here, or click to upload.</span>
+        <input type="file" id="fileInput" accept=".lua,.luau,.txt,.text,.js,.json,text/*" hidden>
+      </label>
+
+      <div class="actions">
+        <button class="btn btn-primary" id="obfuscateBtn">Obfuscate</button>
+        <button class="btn btn-ghost" id="clearBtn">Clear</button>
+      </div>
+      <noscript><div class="status show">JavaScript is turned off in this viewer, so Obfuscate cannot run. Open this file in Chrome, Safari, or Edge.</div></noscript>
+      <div class="status" id="status"></div>
+    </section>
+
+    <section class="panel" style="margin-top: 22px;">
+      <div class="panel-top">
+        <div class="panel-label">Output</div>
+        <button class="btn-ghost btn" id="copyBtn" style="padding: 10px 22px; font-size: 13px;">Copy</button>
+        <button class="btn-ghost btn" id="downloadBtn" style="padding: 10px 22px; font-size: 13px;">Download</button>
+      </div>
+      <textarea id="output" placeholder="Your obfuscated script appears here..." spellcheck="false" readonly></textarea>
+    </section>
+
+    </div>
+
+    <div id="tab-scripts" hidden>
+      <div id="scriptsList"></div>
+    </div>
+
+    <section class="discord-section">
+      <a class="discord-banner" href="https://discord.gg/tyTzSJcQhJ" target="_blank" rel="noopener noreferrer">
+        <div class="discord-left">
+          <svg class="discord-logo" viewBox="0 0 127.14 96.36" xmlns="http://www.w3.org/2000/svg" fill="#ffffff">
+            <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.84C36.18,65.84,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.84,42.45,65.84Zm42.24,0C78.41,65.84,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.84,84.69,65.84Z"/>
+          </svg>
+          <div class="discord-text">
+            <div class="discord-title">Join our Discord</div>
+            <div class="discord-sub">Chat, share, and stay updated.</div>
+          </div>
+        </div>
+        <span class="join-btn">Join Server</span>
+      </a>
+    </section>
+
+    <footer>Timeless &middot; Free Roblox Cheats</footer>
+  </div>
+
+<script>
+  const input = document.getElementById('input');
+  const output = document.getElementById('output');
+  const status = document.getElementById('status');
+
+  // Remember the chosen theme
+  try {
+    if (localStorage.getItem('to-theme') === 'light') document.getElementById('theme-light').checked = true;
+  } catch (e) {}
+  document.getElementById('theme-light').addEventListener('change', () => {
+    try { localStorage.setItem('to-theme', document.getElementById('theme-light').checked ? 'light' : 'dark'); } catch (e) {}
+  });
+
+  function flash(msg) {
+    status.textContent = msg;
+    status.classList.add('show');
+    clearTimeout(flash._t);
+    flash._t = setTimeout(() => status.classList.remove('show'), 2600);
+  }
+
+  // Layered obfuscation: each run encrypts the script with a fresh random key,
+  // packs it into a quote-free alphabet, and wraps it in randomized loader layers
+  // that decrypt and execute it at runtime.
+  const ALPHA = 'HJKMNPQRTUWXYZBD';
+  const ACODE = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) ACODE[i] = ALPHA.charCodeAt(i);
+  const NAME_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  function randName() {
+    let s = '_';
+    const n = 5 + Math.floor(Math.random() * 6);
+    for (let i = 0; i < n; i++) s += NAME_CHARS[Math.floor(Math.random() * NAME_CHARS.length)];
+    return s;
+  }
+  function randKey() {
+    let s = '';
+    const n = 24 + Math.floor(Math.random() * 17);
+    for (let i = 0; i < n; i++) s += String.fromCharCode(65 + Math.floor(Math.random() * 26));
+    return s;
+  }
+  function wrapLayer(bytes) {
+    const key = randKey();
+    const kl = key.length;
+    const buf = new Uint8Array(bytes.length * 2);
+    for (let i = 0; i < bytes.length; i++) {
+      const e = (bytes[i] + key.charCodeAt(i % kl)) & 255;
+      buf[2 * i] = ACODE[e >> 4];
+      buf[2 * i + 1] = ACODE[e & 15];
+    }
+    const payload = new TextDecoder().decode(buf);
+    const Np = randName(), Nk = randName(), Nm = randName(), Na = randName(),
+          No = randName(), Nf = randName(), Nl = randName(), Ni = randName(), Nj = randName();
+    const stub = [
+      'local ' + Np + '="' + payload + '"',
+      'local ' + Nk + '="' + key + '"',
+      'local ' + Na + '="' + ALPHA + '"',
+      'local ' + Nm + '={}',
+      'for ' + Ni + '=1,16 do ' + Nm + '[string.byte(' + Na + ',' + Ni + ')]=' + Ni + '-1 end',
+      'local ' + No + '={}',
+      'local ' + Nj + '=#' + Nk,
+      'for ' + Ni + '=0,#' + Np + '/2-1 do ' + No + '[' + Ni + '+1]=string.char((' + Nm + '[string.byte(' + Np + ',2*' + Ni + '+1)]*16+' + Nm + '[string.byte(' + Np + ',2*' + Ni + '+2)]-string.byte(' + Nk + ',' + Ni + '%' + Nj + '+1))%256) end',
+      'local ' + Nf + '=table.concat(' + No + ')',
+      'local ' + Nl + '=loadstring or load',
+      'local ' + randName() + '=string.byte(' + Nk + ',1)+#' + Np,
+      'local ' + Nj + 'X=' + Nl + '(' + Nf + ')',
+      'return ' + Nj + 'X()'
+    ].join('\n');
+    return new TextEncoder().encode(stub);
+  }
+  async function obfuscate(text) {
+    if (!text.trim()) { flash('Paste a Lua or Luau script first.'); return; }
+    document.body.classList.add('busy');
+    try {
+      let data = new TextEncoder().encode(text);
+      const rounds = data.length <= 49152 ? 3 : data.length <= 262144 ? 2 : 1;
+      for (let r = 1; r <= rounds; r++) {
+        status.textContent = 'Obfuscating... layer ' + r + ' of ' + rounds;
+        status.classList.add('show');
+        await new Promise(res => setTimeout(res, 40));
+        data = wrapLayer(data);
+      }
+      const result = new TextDecoder().decode(data);
+      output.value = result;
+      const entry = { id: Date.now() + '-' + Math.random().toString(36).slice(2, 8), name: scriptName(text, scripts.length + 1), original: text, obfuscated: result, at: Date.now() };
+      scripts.unshift(entry);
+      saveScripts();
+      renderScripts();
+      flash('Obfuscated and saved to My Scripts.');
+    } finally { document.body.classList.remove('busy'); }
+  }
+
+  document.getElementById('obfuscateBtn').addEventListener('click', () => obfuscate(input.value));
+  input.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') obfuscate(input.value);
+  });
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    input.value = '';
+    output.value = '';
+    flash('Cleared.');
+  });
+
+  document.getElementById('copyBtn').addEventListener('click', async () => {
+    if (!output.value) { flash('Nothing to copy yet.'); return; }
+    try { await navigator.clipboard.writeText(output.value); flash('Copied to clipboard.'); }
+    catch (e) { output.select(); document.execCommand('copy'); flash('Copied to clipboard.'); }
+  });
+
+  document.getElementById('downloadBtn').addEventListener('click', () => {
+    if (!output.value) { flash('Nothing to download yet.'); return; }
+    const blob = new Blob([output.value], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'obfuscated.lua';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    flash('Downloading obfuscated.lua.');
+  });
+
+  // Pause background animations while typing or processing, resume on blur
+  function setBusy(v) { document.body.classList.toggle('busy', v); }
+  ['input', 'output'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('focus', () => setBusy(true));
+    el.addEventListener('blur', () => setBusy(false));
+  });
+
+  // Press-pop animation on every button click
+  document.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    b.classList.remove('pressed');
+    void b.offsetWidth;
+    b.classList.add('pressed');
+  });
+
+  // Drag-and-drop file loading
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  ['dragover', 'dragenter'].forEach(ev => dropzone.addEventListener(ev, e => {
+    e.preventDefault(); dropzone.classList.add('dragover');
+  }));
+  ['dragleave', 'drop'].forEach(ev => dropzone.addEventListener(ev, e => {
+    e.preventDefault(); dropzone.classList.remove('dragover');
+  }));
+  dropzone.addEventListener('drop', e => {
+    const f = e.dataTransfer.files[0];
+    if (f) readFile(f);
+  });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) readFile(fileInput.files[0]);
+  });
+  function readFile(f) {
+    setBusy(true);
+    flash('Reading ' + f.name + '...');
+    const reader = new FileReader();
+    reader.onprogress = e => {
+      if (e.lengthComputable && e.loaded < e.total) {
+        status.textContent = 'Reading ' + f.name + '... ' + Math.round(e.loaded / e.total * 100) + '%';
+        status.classList.add('show');
+      }
+    };
+    reader.onload = () => {
+      const text = String(reader.result);
+      input.value = text;
+      const kb = Math.round(text.length / 1024);
+      flash('Loaded ' + f.name + ' (' + (kb >= 1024 ? (kb / 1024).toFixed(1) + ' MB' : kb + ' KB') + ').');
+      setBusy(false);
+      fileInput.value = '';
+    };
+    reader.onerror = () => {
+      setBusy(false);
+      flash('Could not read that file. Try pasting its contents instead.');
+      fileInput.value = '';
+    };
+    reader.readAsText(f);
+  }
+
+  // Saved scripts: every obfuscation is stored here
+  let scripts = [];
+  try { scripts = JSON.parse(localStorage.getItem('to-scripts') || '[]'); } catch (e) { scripts = []; }
+
+  const scriptsList = document.getElementById('scriptsList');
+  const scriptCount = document.getElementById('scriptCount');
+
+  function saveScripts() {
+    try { localStorage.setItem('to-scripts', JSON.stringify(scripts)); }
+    catch (e) { flash('Storage is full. Delete some saved scripts.'); }
+  }
+
+  function scriptName(text, index) {
+    const line = text.split('\n').find(l => l.trim());
+    const base = line ? line.trim().replace(/\s+/g, ' ').slice(0, 40) : '';
+    return base || ('Script ' + index);
+  }
+
+  async function copyText(t) {
+    try { await navigator.clipboard.writeText(t); flash('Copied to clipboard.'); }
+    catch (e) { flash('Copy failed. Select the text manually.'); }
+  }
+
+  function renderScripts() {
+    scriptCount.textContent = scripts.length;
+    if (!scripts.length) {
+      scriptsList.innerHTML = '<div class="empty-note">No saved scripts yet. Obfuscate something and it will appear here.</div>';
+      return;
+    }
+    scriptsList.innerHTML = '';
+    scripts.forEach(s => {
+      const card = document.createElement('div');
+      card.className = 'script-card';
+      const kb = Math.round(s.obfuscated.length / 102.4) / 10;
+      card.innerHTML =
+        '<div class="script-head"><div class="script-name"></div><div class="script-meta"></div></div>' +
+        '<div class="script-actions">' +
+        '<button class="script-btn" data-act="obf">Copy Obfuscated Code</button>' +
+        '<button class="script-btn ghosty" data-act="orig">Copy Original Code</button>' +
+        '<button class="script-btn danger" data-act="del">Delete</button>' +
+        '</div>';
+      card.querySelector('.script-name').textContent = s.name;
+      card.querySelector('.script-meta').textContent = new Date(s.at).toLocaleString() + ' - ' + kb + ' KB';
+      card.querySelector('[data-act="obf"]').addEventListener('click', () => copyText(s.obfuscated));
+      card.querySelector('[data-act="orig"]').addEventListener('click', () => copyText(s.original));
+      card.querySelector('[data-act="del"]').addEventListener('click', () => {
+        scripts = scripts.filter(x => x.id !== s.id);
+        saveScripts();
+        renderScripts();
+        flash('Deleted ' + s.name + '.');
+      });
+      scriptsList.appendChild(card);
+    });
+  }
+
+  // Tabs
+  const tabObfuscator = document.getElementById('tab-obfuscator');
+  const tabScripts = document.getElementById('tab-scripts');
+  function showTab(which) {
+    const obf = which === 'obfuscator';
+    tabObfuscator.hidden = !obf;
+    tabScripts.hidden = obf;
+    document.getElementById('tabBtnObfuscator').classList.toggle('active', obf);
+    document.getElementById('tabBtnScripts').classList.toggle('active', !obf);
+  }
+  document.getElementById('tabBtnObfuscator').addEventListener('click', () => showTab('obfuscator'));
+  document.getElementById('tabBtnScripts').addEventListener('click', () => showTab('scripts'));
+
+  renderScripts();
+
+</script>
+</body>
+</html>
