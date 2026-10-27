@@ -91,18 +91,18 @@
     to   { transform: translateX(114vw) rotate(8deg); }
   }
   @keyframes bob {
-    0%   { margin-top: 0; }
-    50%  { margin-top: -44px; }
-    100% { margin-top: 18px; }
+    0%   { translate: 0 0; }
+    50%  { translate: 0 -44px; }
+    100% { translate: 0 18px; }
   }
   @keyframes flyY {
     from { transform: translateY(-12vh) rotate(90deg); }
     to   { transform: translateY(112vh) rotate(74deg); }
   }
   @keyframes sway {
-    0%   { margin-left: 0; }
-    50%  { margin-left: 42px; }
-    100% { margin-left: -30px; }
+    0%   { translate: 0 0; }
+    50%  { translate: 42px 0; }
+    100% { translate: -30px 0; }
   }
   .theme-radio { position: absolute; opacity: 0; pointer-events: none; }
 
@@ -254,7 +254,7 @@
   }
 
   /* ---------- tabs & saved scripts ---------- */
-  .tabs { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+  .tabs { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; justify-content: center; }
   .tab-btn {
     font-family: inherit; cursor: pointer; font-weight: 700; font-size: 14px;
     color: var(--muted); background: var(--panel); border: 1px solid var(--line);
@@ -333,7 +333,7 @@
     <div class="glyph" style="top:92.9vh;font-size:20.9px;animation:flyX 16.8s linear -11.7s infinite reverse, bob 9.5s ease-in-out -6.9s infinite alternate;">\\</div>
     <div class="glyph" style="top:23.7vh;font-size:16.5px;animation:flyX 44.1s linear -43.0s infinite, bob 15.9s ease-in-out -3.6s infinite alternate;">;</div>
     <div class="glyph tinted" style="top:82.0vh;font-size:21.6px;animation:flyX 21.9s linear -28.1s infinite, bob 8.8s ease-in-out -9.0s infinite alternate;">< ></div>
-    <div class="glyph" style="top:88.5vh;font-size:27.6px;animation:flyX 35.6s linear -3.8s infinite reverse, bob 14.2s ease-in-out -9.0s infinite alternate;">==</div>
+    <div class="glyph" style="top:88.5vh;font-size:27.6px;animation:flyX 35.6s linear -3.8s infinite reverse, bob 14.2s ease-in-out -6.6s infinite alternate;">==</div>
     <div class="glyph" style="top:34.3vh;font-size:28.0px;animation:flyX 38.5s linear -8.0s infinite, bob 11.3s ease-in-out -7.9s infinite alternate;">end</div>
     <div class="glyph" style="top:71.1vh;font-size:15.4px;animation:flyX 45.1s linear -18.1s infinite, bob 10.6s ease-in-out -9.5s infinite alternate;">local</div>
     <div class="glyph tinted" style="top:16.7vh;font-size:28.5px;animation:flyX 19.8s linear -40.7s infinite reverse, bob 8.4s ease-in-out -8.1s infinite alternate;">#</div>
@@ -466,18 +466,24 @@
     else if (i === 92) s = null;
     ESC[i] = s;
   }
-  function obfuscate(text) {
+  async function obfuscate(text) {
     if (!text.trim()) { flash('Paste a Lua or Luau script first.'); return; }
     const bytes = new TextEncoder().encode(text);
     const lines = [];
     let cur = '"';
     let len = 1;
+    const CHUNK = 262144;
     for (let i = 0; i < bytes.length; i++) {
       const b = bytes[i];
       const esc = (b >= 32 && b <= 126 && b !== 92) ? ESC[b] : '\\x' + HEX[b];
       if (len + esc.length > 97) { lines.push(cur + '"'); cur = '.. "'; len = 4; }
       cur += esc;
       len += esc.length;
+      if ((i & (CHUNK - 1)) === CHUNK - 1 && i + 1 < bytes.length) {
+        status.textContent = 'Obfuscating... ' + Math.round((i + 1) / bytes.length * 100) + '%';
+        status.classList.add('show');
+        await new Promise(r => setTimeout(r, 0));
+      }
     }
     lines.push(cur + '"');
     const result = lines.join('\n');
@@ -525,6 +531,12 @@
   function readFile(f) {
     flash('Reading ' + f.name + '...');
     const reader = new FileReader();
+    reader.onprogress = e => {
+      if (e.lengthComputable && e.loaded < e.total) {
+        status.textContent = 'Reading ' + f.name + '... ' + Math.round(e.loaded / e.total * 100) + '%';
+        status.classList.add('show');
+      }
+    };
     reader.onload = () => {
       const text = String(reader.result);
       input.value = text;
